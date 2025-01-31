@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Commander Keen Inspired Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      font-family: sans-serif;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      font-size: 18px;
+    }
+    canvas {
+      display: block;
+      background: #222;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    Lives: <span id="lives">3</span> | Score: <span id="score">0</span> | Level: <span id="level">1</span>
+  </div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <script>
+    // Setup canvas and context
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Info elements
+    const infoLives = document.getElementById('lives');
+    const infoScore = document.getElementById('score');
+    const infoLevel = document.getElementById('level');
+    
+    // Global game variables
+    let level = 1;
+    let levelEnd = 1000; // x-coordinate objective to finish level
+    let gameOver = false;
+    
+    // Key tracking
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+    
+    // Player object
+    const player = {
+      x: 100,
+      y: 500,
+      width: 32,
+      height: 48,
+      vx: 0,
+      vy: 0,
+      speed: 3,
+      jumpStrength: -10,
+      onGround: false,
+      lives: 3,
+      score: 0,
+      startX: 100,
+      startY: 500
+    };
+    
+    // Gravity constant
+    const gravity = 0.5;
+    
+    // Platforms array – common to all levels (could be varied per level)
+    let platforms = [
+      { x: 0, y: 550, width: 1200, height: 50 },  // ground platform
+      { x: 200, y: 450, width: 100, height: 10 },
+      { x: 400, y: 400, width: 150, height: 10 },
+      { x: 700, y: 350, width: 100, height: 10 }
+    ];
+    
+    // Enemies array – will be spawned based on level
+    let enemies = [];
+    
+    // Bullets array – player’s pistol bullets
+    let bullets = [];
+    
+    // Camera offset for horizontal scrolling
+    let cameraX = 0;
+    
+    // Spawn enemies based on current level. In level 1 we keep them sparse.
+    function spawnEnemies() {
+      enemies = [];
+      // For demo: create two enemies for level 1, more for higher levels.
+      let numEnemies = Math.min(2 + level, 6);
+      for (let i = 0; i < numEnemies; i++) {
+        // Spread enemies between x = 250 and levelEnd - 100.
+        let ex = 250 + i * ((levelEnd - 350) / numEnemies);
+        enemies.push({
+          x: ex,
+          y: 510,  // positioned on the ground platform
+          width: 32,
+          height: 32,
+          vx: 1 + 0.2 * level, // slightly faster at higher levels
+          // Patrol boundaries for each enemy
+          minX: ex - 50,
+          maxX: ex + 50
+        });
+      }
+    }
+    
+    // Call once to initialize level 1 enemies
+    spawnEnemies();
+    
+    // Function to update info display
+    function updateInfo() {
+      infoLives.innerText = player.lives;
+      infoScore.innerText = player.score;
+      infoLevel.innerText = level;
+    }
+    
+    // Player shooting: when "KeyZ" is pressed, fire a bullet.
+    // For simplicity, allow multiple bullets.
+    function shootBullet() {
+      bullets.push({
+        x: player.x + player.width, // start from player's right side
+        y: player.y + player.height / 2,
+        width: 8,
+        height: 4,
+        vx: 6
+      });
+    }
+    
+    // Listen for shooting key ("Z")
+    window.addEventListener('keydown', e => {
+      if(e.code === 'KeyZ') {
+        shootBullet();
+      }
+    });
+    
+    // Update game state
+    function update() {
+      if (gameOver) return;
+      
+      // Horizontal movement
+      if (keys['ArrowLeft']) {
+        player.vx = -player.speed;
+      } else if (keys['ArrowRight']) {
+        player.vx = player.speed;
+      } else {
+        player.vx = 0;
+      }
+    
+      // Jump if on ground
+      if ((keys['Space'] || keys['ArrowUp']) && player.onGround) {
+        player.vy = player.jumpStrength;
+        player.onGround = false;
+      }
+    
+      // Apply gravity
+      player.vy += gravity;
+    
+      // Update player position
+      player.x += player.vx;
+      player.y += player.vy;
+    
+      // Collision with platforms
+      player.onGround = false;
+      for (let platform of platforms) {
+        if (player.x < platform.x + platform.width &&
+            player.x + player.width > platform.x &&
+            player.y < platform.y + platform.height &&
+            player.y + player.height > platform.y) {
+          // Collision from above
+          if (player.vy > 0) {
+            player.y = platform.y - player.height;
+            player.vy = 0;
+            player.onGround = true;
+          }
+        }
+      }
+    
+      // If player falls off the bottom of the screen, lose a life
+      if (player.y > canvas.height) {
+        loseLife();
+      }
+    
+      // Update bullets
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.x += b.vx;
+        // Remove bullet if it goes off screen
+        if (b.x > canvas.width + cameraX) {
+          bullets.splice(i, 1);
+        } else {
+          // Check bullet collision with enemies
+          for (let j = enemies.length - 1; j >= 0; j--) {
+            let e = enemies[j];
+            if (b.x < e.x + e.width &&
+                b.x + b.width > e.x &&
+                b.y < e.y + e.height &&
+                b.y + b.height > e.y) {
+              // Enemy hit: remove enemy and bullet; add score.
+              enemies.splice(j, 1);
+              bullets.splice(i, 1);
+              player.score += 100;
+              break;
+            }
+          }
+        }
+      }
+    
+      // Update enemy positions and check collisions with player
+      for (let enemy of enemies) {
+        enemy.x += enemy.vx;
+        // Reverse direction at patrol boundaries
+        if (enemy.x < enemy.minX || enemy.x + enemy.width > enemy.maxX) {
+          enemy.vx *= -1;
+        }
+        // Check collision with player (Axis-Aligned Bounding Box)
+        if (player.x < enemy.x + enemy.width &&
+            player.x + player.width > enemy.x &&
+            player.y < enemy.y + enemy.height &&
+            player.y + player.height > enemy.y) {
+          loseLife();
+        }
+      }
+    
+      // Level objective: if player reaches levelEnd, progress to next level
+      if (player.x >= levelEnd) {
+        levelComplete();
+      }
+    
+      // Update camera to follow player horizontally
+      cameraX = player.x - 100; // adjust offset as desired
+    
+      updateInfo();
+    }
+    
+    // Handle life loss and game over
+    function loseLife() {
+      player.lives--;
+      if (player.lives <= 0) {
+        alert("Game Over!");
+        resetGame();
+      } else {
+        // Reset player position (keep score and level)
+        player.x = player.startX;
+        player.y = player.startY;
+        player.vx = 0;
+        player.vy = 0;
+      }
+    }
+    
+    // Handle level completion: advance level and increase difficulty
+    function levelComplete() {
+      alert("Level " + level + " Complete!");
+      level++;
+      // Increase level objective (e.g., next level is longer)
+      levelEnd += 500;
+      // Optionally: modify platforms/enemies for more difficulty
+      // For demo, we'll increase enemy count and speed.
+      spawnEnemies();
+      // Reset player to start of level
+      player.x = player.startX;
+      player.y = player.startY;
+      player.vx = 0;
+      player.vy = 0;
+    }
+    
+    // Reset entire game state (lives, score, level)
+    function resetGame() {
+      player.lives = 3;
+      player.score = 0;
+      level = 1;
+      levelEnd = 1000;
+      spawnEnemies();
+      player.x = player.startX;
+      player.y = player.startY;
+      player.vx = 0;
+      player.vy = 0;
+      gameOver = false;
+    }
+    
+    // Draw game scene
+    function draw() {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+      // Draw platforms (adjusted for camera scrolling)
+      ctx.fillStyle = '#555';
+      for (let platform of platforms) {
+        ctx.fillRect(platform.x - cameraX, platform.y, platform.width, platform.height);
+      }
+    
+      // Draw enemies (in red)
+      ctx.fillStyle = '#FF0000';
+      for (let enemy of enemies) {
+        ctx.fillRect(enemy.x - cameraX, enemy.y, enemy.width, enemy.height);
+      }
+    
+      // Draw bullets (in yellow)
+      ctx.fillStyle = '#FFFF00';
+      for (let bullet of bullets) {
+        ctx.fillRect(bullet.x - cameraX, bullet.y, bullet.width, bullet.height);
+      }
+    
+      // Draw player (in blue)
+      ctx.fillStyle = '#0DC2FF';
+      ctx.fillRect(player.x - cameraX, player.y, player.width, player.height);
+    
+      // Draw level finish line
+      ctx.strokeStyle = '#00FF00';
+      ctx.beginPath();
+      ctx.moveTo(levelEnd - cameraX, 0);
+      ctx.lineTo(levelEnd - cameraX, canvas.height);
+      ctx.stroke();
+    }
+    
+    // Main game loop
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // Start the game
+    gameLoop();
+  </script>
+</body>
+</html>
