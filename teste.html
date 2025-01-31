@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Commander Keen Inspired Game</title>
+  <title>Commander Keen Inspired Game with Parallax</title>
   <style>
     body {
       margin: 0;
@@ -117,7 +117,6 @@
     }
     
     // Player shooting: when "KeyZ" is pressed, fire a bullet.
-    // For simplicity, allow multiple bullets.
     function shootBullet() {
       bullets.push({
         x: player.x + player.width, // start from player's right side
@@ -134,6 +133,27 @@
         shootBullet();
       }
     });
+    
+    // Draw the parallax background
+    function drawParallax() {
+      // Far background: a gradient sky.
+      let gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#001');
+      gradient.addColorStop(1, '#123');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Near background: hills that move slower than the camera for parallax effect.
+      ctx.fillStyle = '#022';
+      let hillOffset = (cameraX * 0.3) % canvas.width;
+      // Draw two hills using arcs
+      ctx.beginPath();
+      ctx.arc(-hillOffset, canvas.height, 150, Math.PI, 2 * Math.PI);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(canvas.width - hillOffset, canvas.height, 150, Math.PI, 2 * Math.PI);
+      ctx.fill();
+    }
     
     // Update game state
     function update() {
@@ -168,7 +188,7 @@
             player.x + player.width > platform.x &&
             player.y < platform.y + platform.height &&
             player.y + player.height > platform.y) {
-          // Collision from above
+          // Collision from above: land on platform
           if (player.vy > 0) {
             player.y = platform.y - player.height;
             player.vy = 0;
@@ -255,8 +275,7 @@
       level++;
       // Increase level objective (e.g., next level is longer)
       levelEnd += 500;
-      // Optionally: modify platforms/enemies for more difficulty
-      // For demo, we'll increase enemy count and speed.
+      // Increase enemy count and speed for demo purposes.
       spawnEnemies();
       // Reset player to start of level
       player.x = player.startX;
@@ -281,31 +300,31 @@
     
     // Draw game scene
     function draw() {
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
+      // Draw parallax background first
+      drawParallax();
+      
       // Draw platforms (adjusted for camera scrolling)
       ctx.fillStyle = '#555';
       for (let platform of platforms) {
         ctx.fillRect(platform.x - cameraX, platform.y, platform.width, platform.height);
       }
-    
+      
       // Draw enemies (in red)
       ctx.fillStyle = '#FF0000';
       for (let enemy of enemies) {
         ctx.fillRect(enemy.x - cameraX, enemy.y, enemy.width, enemy.height);
       }
-    
+      
       // Draw bullets (in yellow)
       ctx.fillStyle = '#FFFF00';
       for (let bullet of bullets) {
         ctx.fillRect(bullet.x - cameraX, bullet.y, bullet.width, bullet.height);
       }
-    
+      
       // Draw player (in blue)
       ctx.fillStyle = '#0DC2FF';
       ctx.fillRect(player.x - cameraX, player.y, player.width, player.height);
-    
+      
       // Draw level finish line
       ctx.strokeStyle = '#00FF00';
       ctx.beginPath();
